@@ -886,10 +886,11 @@ const LS_KEY_PREFIX = 'arcadia_v1_';
 
 // Fill these in from your Supabase project (Project Settings -> API).
 // Leave them as-is to run with local-only storage (no cross-player sharing).
-const SUPABASE_URL = 'YOUR_SUPABASE_URL';
-const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+const SUPABASE_URL = 'https://urihjqgitlunjjkmrxnt.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_XWZUAwHKnIRiSYDGS2a2MQ_feuV0NUl';
 
 let DB = null, USER = null, MY_ID = null, HAS_DB = false;
+let SB_CLIENT = null, SB_USER_EMAIL = null;
 
 function withTimeout(promise, ms){
   return Promise.race([
@@ -991,14 +992,53 @@ async function initCapabilities(){
   try{
     const configured = SUPABASE_URL.indexOf('YOUR_SUPABASE_URL')===-1 && SUPABASE_ANON_KEY.indexOf('YOUR_SUPABASE_ANON_KEY')===-1;
     if(configured && window.supabase){
-      DB = makeSupabaseDB(window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY));
+      SB_CLIENT = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      DB = makeSupabaseDB(SB_CLIENT);
+      // Every visitor gets a real Supabase Auth session, starting anonymous.
+      // Signing in with Google later links that SAME user id to a Google
+      // identity (see linkGoogleAccount), so existing progress carries over
+      // automatically instead of needing a data migration.
+      let { data: sessData } = await withTimeout(SB_CLIENT.auth.getSession(), 6000);
+      let session = sessData ? sessData.session : null;
+      if(!session){
+        const { data, error } = await withTimeout(SB_CLIENT.auth.signInAnonymously(), 8000);
+        if(error) throw error;
+        session = data.session;
+      }
+      MY_ID = session.user.id;
+      SB_USER_EMAIL = session.user.email || null;
+      SB_CLIENT.auth.onAuthStateChange((_event, sess)=>{
+        SB_USER_EMAIL = sess && sess.user ? (sess.user.email || null) : null;
+        if(sess && sess.user) MY_ID = sess.user.id;
+        if(S.screen==='settings') render();
+      });
     }
-  }catch(e){ DB = null; }
-  try{
-    MY_ID = localStorage.getItem(LS_KEY_PREFIX+'guest_id');
-    if(!MY_ID){ MY_ID = 'guest_'+uid(); localStorage.setItem(LS_KEY_PREFIX+'guest_id', MY_ID); }
-  }catch(e){ MY_ID = 'guest_'+uid(); }
+  }catch(e){ DB = null; SB_CLIENT = null; }
+  if(!MY_ID){
+    try{
+      MY_ID = localStorage.getItem(LS_KEY_PREFIX+'guest_id');
+      if(!MY_ID){ MY_ID = 'guest_'+uid(); localStorage.setItem(LS_KEY_PREFIX+'guest_id', MY_ID); }
+    }catch(e){ MY_ID = 'guest_'+uid(); }
+  }
   HAS_DB = !!DB;
+}
+
+// Starts Google sign-in. If the visitor is still on their anonymous session
+// this LINKS Google to that same account (id unchanged, progress kept); if
+// they're already signed in (e.g. returning after linking) it just re-auths.
+async function linkGoogleAccount(){
+  if(!SB_CLIENT){ showToast('Google sign-in needs shared storage, unavailable in this view.'); return; }
+  try{
+    const { data: sessData } = await SB_CLIENT.auth.getSession();
+    const session = sessData ? sessData.session : null;
+    const isAnon = session && session.user && session.user.is_anonymous;
+    const opts = { provider:'google', options:{ redirectTo: window.location.href } };
+    const { error } = isAnon
+      ? await SB_CLIENT.auth.linkIdentity(opts)
+      : await SB_CLIENT.auth.signInWithOAuth(opts);
+    if(error) throw error;
+    // Browser navigates to Google and back; nothing more to do here.
+  }catch(e){ showToast('Could not start Google sign-in — try again.'); }
 }
 
 async function loadCharacter(){
@@ -1777,7 +1817,10 @@ function renderSettings(){
     <div class="stat-list">
       <div><span>Player ID</span><b style="font-size:11px;">${esc(MY_ID.slice(0,14))}&hellip;</b></div>
       <div><span>Storage</span><b>${HAS_DB?'Shared (cross-viewer)':'Local to this browser'}</b></div>
+      ${HAS_DB ? `<div><span>Google Account</span><b>${SB_USER_EMAIL ? esc(SB_USER_EMAIL) : 'Not linked'}</b></div>` : ''}
     </div>
+    ${HAS_DB && !SB_USER_EMAIL ? `<button class="btn btn-sm" data-action="google-signin" style="margin-top:10px;">Sign in with Google</button>
+    <p class="faint" style="margin-top:8px; line-height:1.6;">Link a Google account so your progress follows you to other devices and browsers instead of staying tied to this one.</p>` : ''}
     <p class="faint" style="margin-top:10px; line-height:1.6;">
       This is an in-browser prototype of REALMCLASH MMO's core loop. ${HAS_DB
         ? 'Your character is saved to shared storage, so other people who open this page can be matched against you in the PvP Arena.'
@@ -2173,6 +2216,7 @@ document.addEventListener('click', async (e)=>{
     setScreen('home');
     return;
   }
+  if(action==='google-signin'){ await linkGoogleAccount(); return; }
   if(action==='nav'){
     setScreen(el.dataset.screen);
     S.pvpCandidates = null;
