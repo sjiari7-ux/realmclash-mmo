@@ -9,12 +9,12 @@ const LS_KEY_PREFIX = 'arcadia_v1_';
 // "Your apps" -> SDK setup and configuration). Leave apiKey as-is to run
 // with local-only storage (no cross-player sharing).
 const FIREBASE_CONFIG = {
-  apiKey: 'YOUR_FIREBASE_API_KEY',
-  authDomain: 'YOUR_PROJECT_ID.firebaseapp.com',
-  projectId: 'YOUR_PROJECT_ID',
-  storageBucket: 'YOUR_PROJECT_ID.appspot.com',
-  messagingSenderId: 'YOUR_SENDER_ID',
-  appId: 'YOUR_APP_ID',
+  apiKey: 'AIzaSyBAlgkUWrDq9yyMk1T41XAVq_36Va1b0sY',
+  authDomain: 'realmclash-mmo-ecd36.firebaseapp.com',
+  projectId: 'realmclash-mmo-ecd36',
+  storageBucket: 'realmclash-mmo-ecd36.firebasestorage.app',
+  messagingSenderId: '660823039361',
+  appId: '1:660823039361:web:60847e144e7812d34d5c80',
 };
 
 let DB = null, USER = null, MY_ID = null, HAS_DB = false;
