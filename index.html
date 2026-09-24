@@ -988,6 +988,23 @@ function makeSupabaseDB(client){
   return { doc: docRef, collection: collectionRef };
 }
 
+// Case-insensitive check that no OTHER player already has this username.
+// Best-effort: a network hiccup here never blocks character creation.
+async function isUsernameTaken(username){
+  if(!HAS_DB || !SB_CLIENT) return false;
+  try{
+    const { data, error } = await withTimeout(
+      SB_CLIENT.from('game_docs').select('id')
+        .eq('collection','players')
+        .ilike('data->>username', username)
+        .limit(5),
+      6000
+    );
+    if(error) throw error;
+    return (data||[]).some(r=> r.id !== MY_ID);
+  }catch(e){ return false; }
+}
+
 async function initCapabilities(){
   try{
     const configured = SUPABASE_URL.indexOf('YOUR_SUPABASE_URL')===-1 && SUPABASE_ANON_KEY.indexOf('YOUR_SUPABASE_ANON_KEY')===-1;
@@ -1462,7 +1479,8 @@ function renderCreate(){
       </div>
       <div class="panel" style="margin-bottom:16px;">
         <label class="field">Username</label>
-        <input type="text" id="username-input" maxlength="18" placeholder="Choose a name" value="${esc(state.username)}">
+        <input type="text" id="username-input" maxlength="18" placeholder="Choose a name (min. 3 characters)" value="${esc(state.username)}">
+        <p class="faint" style="margin-top:6px;">At least 3 characters, and must be unique — no two players can share a name.</p>
       </div>
       <div class="panel-title" style="margin-bottom:10px;">Choose your class</div>
       <div class="grid grid-3" style="margin-bottom:20px;">${cards}</div>
@@ -2226,8 +2244,10 @@ document.addEventListener('click', async (e)=>{
   if(action==='pick-class'){ S._create.classId = el.dataset.class; render(); return; }
   if(action==='create-character'){
     const st = S._create;
-    const uname = (st.username||'').trim().slice(0,18) || pick(BOT_NAMES);
+    const uname = (st.username||'').trim().slice(0,18);
     if(!st.classId) return;
+    if(uname.length < 3){ showToast('Username must be at least 3 characters.'); return; }
+    if(await isUsernameTaken(uname)){ showToast('That username is already taken — pick another.'); return; }
     S.char = newCharacter(MY_ID, uname, st.classId);
     await saveCharacter(S.char);
     setScreen('home');
