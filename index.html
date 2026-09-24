@@ -1045,6 +1045,7 @@ async function initCapabilities(){
 // they're already signed in (e.g. returning after linking) it just re-auths.
 async function linkGoogleAccount(){
   if(!SB_CLIENT){ showToast('Google sign-in needs shared storage, unavailable in this view.'); return; }
+  showToast('Opening Google sign-in…');
   try{
     const { data: sessData } = await SB_CLIENT.auth.getSession();
     const session = sessData ? sessData.session : null;
@@ -1055,7 +1056,7 @@ async function linkGoogleAccount(){
       : await SB_CLIENT.auth.signInWithOAuth(opts);
     if(error) throw error;
     // Browser navigates to Google and back; nothing more to do here.
-  }catch(e){ showToast('Could not start Google sign-in — try again.'); }
+  }catch(e){ showToast('Google sign-in error: ' + (e && e.message ? e.message : String(e))); }
 }
 
 async function loadCharacter(){
