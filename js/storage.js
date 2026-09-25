@@ -81,8 +81,20 @@ async function initCapabilities(){
       FB_AUTH = firebase.auth();
       DB = firebase.firestore();
       // If we're bouncing back from a Google redirect sign-in, pick that up
-      // first (errors here — e.g. the user closed the popup — are ignored).
-      try{ await withTimeout(FB_AUTH.getRedirectResult(), 8000); }catch(e){}
+      // first. Most errors here (e.g. the user closed the popup) are safe to
+      // ignore, but 'credential-already-in-use' means this Google identity
+      // is already linked to a DIFFERENT Firebase user (e.g. from an earlier
+      // test run) — the current anonymous session can't claim it, so we sign
+      // in as that existing account directly using the credential attached
+      // to the error, instead of silently staying anonymous forever.
+      try{ await withTimeout(FB_AUTH.getRedirectResult(), 8000); }
+      catch(e){
+        if(e && e.code === 'auth/credential-already-in-use' && e.credential){
+          try{ await withTimeout(FB_AUTH.signInWithCredential(e.credential), 8000); }catch(e2){}
+        } else if(e){
+          console.warn('Google redirect sign-in failed:', e.code || e.message || e);
+        }
+      }
       // Every visitor gets a real Firebase Auth session, starting anonymous.
       // Linking Google later keeps the SAME uid, so existing progress
       // carries over automatically instead of needing a data migration.
