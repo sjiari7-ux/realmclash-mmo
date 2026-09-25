@@ -202,12 +202,12 @@ async function takeStep(){
     }
   } else if(ev==='monster'){
     road.log.push({text:'Something rustles in the brush ahead...', cls:'hit'});
-    await saveCharacter(c);
+    saveCharacter(c); // fire-and-forget: don't block entering combat on the network write
     await startPve(road.zoneId, null, {returnScreen:'road', skipEnergyCost:true});
     return;
   }
-  await saveCharacter(c);
-  render();
+  render(); // update the screen immediately so the step's result shows without waiting on the network
+  saveCharacter(c); // fire-and-forget: persists in the background, doesn't block the UI
 }
 
 async function startPvp(opponentData){
@@ -569,4 +569,3 @@ boot();
 // (e.g. a capability promise that neither resolves, rejects, nor respects our
 // timeout), never leave the player staring at the loading screen forever.
 setTimeout(()=>{ if(S.screen==='loading') setScreen(S.char ? 'home' : 'create'); }, 9000);
-
