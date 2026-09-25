@@ -121,24 +121,40 @@ async function initCapabilities(){
   HAS_DB = !!DB;
 }
 
-// Starts Google sign-in. If the visitor is still on their anonymous session
-// this LINKS Google to that same account (uid unchanged, progress kept); if
-// they're already signed in (e.g. returning after linking) it just re-auths.
-// Uses a full-page redirect (not a popup) so it works the same way the
-// Supabase OAuth flow did.
+// Starts Google sign-in via a popup window. If the visitor is still on their
+// anonymous session this LINKS Google to that same account (uid unchanged,
+// progress kept); if they're already signed in it just re-auths.
+// Uses a popup (not a full-page redirect) because Chrome's bounce-tracking
+// mitigation can wipe the sessionStorage a redirect flow depends on when it
+// bounces through the authDomain (firebaseapp.com) — a popup avoids that
+// multi-hop navigation chain entirely, and resolves in-place with no reload.
 async function linkGoogleAccount(){
   if(!FB_AUTH){ showToast('Google sign-in needs shared storage, unavailable in this view.'); return; }
   showToast('Opening Google sign-in…');
   try{
     const provider = new firebase.auth.GoogleAuthProvider();
     const user = FB_AUTH.currentUser;
-    if(user && user.isAnonymous){
-      await user.linkWithRedirect(provider);
-    } else {
-      await FB_AUTH.signInWithRedirect(provider);
+    let result;
+    try{
+      result = (user && user.isAnonymous)
+        ? await user.linkWithPopup(provider)
+        : await FB_AUTH.signInWithPopup(provider);
+    }catch(e){
+      // This Google identity is already linked to a DIFFERENT Firebase user
+      // (e.g. from an earlier test run) — sign in as that existing account
+      // directly using the credential attached to the error, instead of
+      // failing the whole flow.
+      if(e && e.code === 'auth/credential-already-in-use' && e.credential){
+        result = await FB_AUTH.signInWithCredential(e.credential);
+      } else throw e;
     }
-    // Browser navigates to Google and back; getRedirectResult() in
-    // initCapabilities picks up the result on the next load.
+    MY_ID = result.user.uid;
+    FB_USER_EMAIL = result.user.email || null;
+    // No page reload happens with a popup, so pick the next screen ourselves
+    // instead of relying on boot() to re-run.
+    const existing = await loadCharacter();
+    if(existing){ S.char = migrateCharacter(existing); applyRegen(S.char); await saveCharacter(S.char); }
+    setScreen(S.char ? 'home' : 'create');
   }catch(e){ showToast('Google sign-in error: ' + (e && e.message ? e.message : String(e))); }
 }
 
