@@ -387,7 +387,8 @@ async function loadMarketListings(){
     S.marketListings = snap.docs.map(d=>Object.assign({id:d.id}, d.data()));
   }catch(e){
     S.marketListings = [];
-    showToast('Could not load the market — try again.');
+    console.error('loadMarketListings failed:', e && e.code, e && e.message, e);
+    showToast('Could not load the market — try again.'+(e&&e.code?' ('+e.code+')':''));
   }
   render();
 }
@@ -438,7 +439,8 @@ async function createListing(kind, itemKey, qty, pricePerUnit){
     showToast('Listing created.');
     loadMarketListings(); // don't block — it renders its own loading/final state
   }catch(e){
-    showToast('Could not create the listing — try again.');
+    console.error('createListing failed:', e && e.code, e && e.message, e);
+    showToast('Could not create the listing — try again.'+(e&&e.code?' ('+e.code+')':''));
   }
 }
 
@@ -485,7 +487,8 @@ async function buyListing(listingId){
     showToast(`Bought ${marketItemLabel(l).replace(/<[^>]+>/g,'')} for ${l.totalPrice}g.`);
     loadMarketListings(); // don't block — it renders its own loading/final state
   }catch(e){
-    showToast('Purchase failed — try again.');
+    console.error('buyListing failed:', e && e.code, e && e.message, e);
+    showToast('Purchase failed — try again.'+(e&&e.code?' ('+e.code+')':''));
   }
 }
 
@@ -512,7 +515,10 @@ async function cancelListing(listingId){
     saveCharacter(c); // fire-and-forget
     showToast('Listing cancelled — item returned to your bag.');
     loadMarketListings(); // don't block — it renders its own loading/final state
-  }catch(e){ showToast('Could not cancel — try again.'); }
+  }catch(e){
+    console.error('cancelListing failed:', e && e.code, e && e.message, e);
+    showToast('Could not cancel — try again.'+(e&&e.code?' ('+e.code+')':''));
+  }
 }
 
 async function findOpponents(myChar){
